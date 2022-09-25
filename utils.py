@@ -13,10 +13,6 @@ from collections import defaultdict, deque
 import datetime
 import numpy as np
 from timm.utils import get_state_dict
-import pandas as  pd
-import plotly.express as px
-import tempfile
-import hostlist
 
 from pathlib import Path
 
@@ -25,6 +21,26 @@ import torch.distributed as dist
 from torch._six import inf
 
 from tensorboardX import SummaryWriter
+
+import hostlist
+
+def get_dcls_loss_rep(model, loss):
+    layer_count = 0
+    loss_rep = torch.zeros_like(loss)
+    for name, param in model.named_parameters():
+        if name.endswith(".P"):
+            layer_count += 1
+            if param.dim() < 4 :
+                param = param.unsqueeze(1)
+            chout, chin, k_count = param.size(1), param.size(2), param.size(3)
+            P = param.reshape(2, chout * chin, k_count)
+            P = P.permute(1,2,0).contiguous()
+            distances = torch.cdist(P,P,p=2)
+            distances_triu = (1-distances).triu(diagonal=1)
+            loss_rep += 2*torch.sum(torch.clamp_min(distances_triu , min=0)) / (k_count*(k_count-1)*chout*chin)
+
+    loss_rep /= layer_count
+    return loss_rep
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -251,69 +267,7 @@ class WandbLogger(object):
         # Set epoch-wise step
         self._wandb.define_metric('Global Train/*', step_metric='epoch')
         self._wandb.define_metric('Global Test/*', step_metric='epoch')
-        self._wandb.define_metric('Dcls pos |P| max/*', step_metric='epoch')
-        self._wandb.define_metric('Dcls pos avg speed/*', step_metric='epoch')
-        self._wandb.define_metric('Dcls heatmap hists/*', step_metric='epoch')
-        self._wandb.define_metric('Dcls scatters/*', step_metric='epoch')
 
-class DclsVisualizer(object):
-    def __init__(self, wandb_logger=None, num_bins=7, epoch=0, dcls_df=None, num_stages = 4, max_epoch=300):
-        self.wandb_logger = wandb_logger
-        self.num_bins = num_bins
-        self.p_prev = {}
-        self.num_stages = num_stages
-        self.epoch = epoch
-        self.max_epoch = max_epoch
-        self.df = {}
-
-        if dcls_df is not None:
-            self.df = dcls_df
-
-    def log_layer(self, model, stage, block):
-        key = 's{stage},b{block}'.format(stage=stage,block=block)
-        p = model.module.stages[stage][block].dwconv if hasattr(model, 'module') else model.stages[stage][block].dwconv
-        out_channels, kernel_count = p.out_channels, p.kernel_count
-        p = p.P * p.scaling
-
-        if key not in self.p_prev:
-            self.p_prev[key] = torch.zeros_like(p)
-
-        speed = (p - self.p_prev[key]).abs().mean()
-
-        self.wandb_logger._wandb.log({'Dcls pos |P| max/(s{stage},b{block})'.format(stage=stage,block=block): p.abs().max()})
-        self.wandb_logger._wandb.log({'Dcls pos avg speed/(s{stage},b{block})'.format(stage=stage,block=block): speed})
-        self.wandb_logger._wandb.log({'Dcls heatmap hists/(s{stage},b{block})'.format(stage=stage,block=block):
-                                      self.wandb_logger._wandb.Histogram(p.detach().cpu(), num_bins=self.num_bins)})
-
-        step = max(out_channels//4, 1)
-        p_df = p[:,0:-1:step,0,:].clamp(-self.num_bins//2, self.num_bins//2)
-        categories = torch.arange(p_df.size(1)).repeat_interleave(kernel_count)
-        df = pd.DataFrame(p_df.reshape((2, -1)).detach().cpu().numpy().T)
-        df[2]  = categories
-        df[3]  = self.epoch
-
-        self.df[key] = df if key not in self.df else pd.concat([self.df[key], df], ignore_index=True)
-
-        step = max(self.max_epoch//3, 1)
-        if self.epoch % step == 0:
-            fig = px.scatter(self.df[key], x=0, y=1, color=2,
-                             range_x=[-self.num_bins//2,self.num_bins//2],
-                             range_y=[-self.num_bins//2,self.num_bins//2],
-                             animation_frame=3, size=2)
-            with tempfile.NamedTemporaryFile() as fp:
-                fig.write_html(fp.name)
-                self.wandb_logger._wandb.log({'Dcls scatters/(s{stage},b{block})'.format(stage=stage,block=block):
-                                              self.wandb_logger._wandb.Html(open(fp.name), inject=False)})
-        self.p_prev[key] = p
-
-    def log_all_layers(self, model, sync=False):
-        for stage in range(self.num_stages):
-            if sync:
-                self.log_layer(model, stage, 0)
-            else:
-                for block in range(model.module.depths[stage]):
-                    self.log_layer(model, stage, block)
-        self.epoch += 1
 
 def setup_for_distributed(is_master):
     """
@@ -360,6 +314,7 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
+
     if args.dist_on_itp:
         args.rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
         args.world_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
@@ -380,13 +335,10 @@ def init_distributed_mode(args):
         os.environ['RANK'] = str(args.rank)
         os.environ['LOCAL_RANK'] = str(args.gpu)
         os.environ['WORLD_SIZE'] = str(args.world_size)
-
         # get node list from slurm
         hostnames = hostlist.expand_hostlist(os.environ['SLURM_JOB_NODELIST'])
-
         # get IDs of reserved GPU
         gpu_ids = os.environ['SLURM_STEP_GPUS'].split(",")
-
         # define MASTER_ADD & MASTER_PORT
         os.environ['MASTER_ADDR'] = hostnames[0]
         os.environ['MASTER_PORT'] = str(12345 + int(min(gpu_ids))) # to avoid port conflict on the same node
@@ -401,10 +353,11 @@ def init_distributed_mode(args):
     args.dist_backend = 'nccl'
     print('| distributed init (rank {}): {}, gpu {}'.format(
         args.rank, args.dist_url, args.gpu), flush=True)
-    torch.distributed.init_process_group(backend=args.dist_backend, init_method="env://",
+    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                          world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
 
 def load_state_dict(model, state_dict, prefix='', ignore_missing="relative_position_index"):
     missing_keys = []
@@ -579,7 +532,4 @@ def auto_load_model(args, model, model_without_ddp, optimizer, loss_scaler, mode
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
             print("With optim & sched!")
-
-        if args.use_dcls and 'args' in checkpoint:
-            args.dcls_df = checkpoint['args'].dcls_df
 

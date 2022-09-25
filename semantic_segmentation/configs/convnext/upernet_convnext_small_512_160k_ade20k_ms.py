@@ -14,10 +14,9 @@ crop_size = (512, 512)
 
 model = dict(
     backbone=dict(
-        type='ConvNeXt',
         in_chans=3,
-        depths=[3, 3, 27, 3],
-        dims=[96, 192, 384, 768],
+        depths=[3, 3, 27, 3], 
+        dims=[96, 192, 384, 768], 
         drop_path_rate=0.3,
         layer_scale_init_value=1.0,
         out_indices=[0, 1, 2, 3],
@@ -29,11 +28,10 @@ model = dict(
     auxiliary_head=dict(
         in_channels=384,
         num_classes=150
-    ),
-    test_cfg = dict(mode='slide', crop_size=crop_size, stride=(341, 341))    
+    ), 
 )
 
-optimizer = dict(constructor='LearningRateDecayOptimizerConstructor', _delete_=True, type='AdamW',
+optimizer = dict(constructor='LearningRateDecayOptimizerConstructor', _delete_=True, type='AdamW', 
                  lr=0.0001, betas=(0.9, 0.999), weight_decay=0.05,
                  paramwise_cfg={'decay_rate': 0.9,
                                 'decay_type': 'stage_wise',
@@ -60,28 +58,4 @@ optimizer_config = dict(
     bucket_size_mb=-1,
     use_fp16=True,
 )
-img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-crop_size = (512, 512)
-# test_cfg = dict(mode='slide', crop_size=crop_size, stride=(341, 341))
-find_unused_parameters = True
 
-test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(
-        type='MultiScaleFlipAug',
-        img_scale=(2048, 512),
-        img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-        flip=True,
-        transforms=[
-            dict(type='SETR_Resize', keep_ratio=True,
-                 crop_size=crop_size, setr_multi_scale=True),
-            dict(type='RandomFlip'),
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img']),
-        ])
-]
-data = dict(
-    val=dict(pipeline=test_pipeline),
-    test=dict(pipeline=test_pipeline))

@@ -74,6 +74,7 @@ class ConvNeXt_dcls(nn.Module):
                  dcls_kernel_size=17, dcls_kernel_count=34):
         super().__init__()
         self.depths = depths
+        self.dcls_kernel_size = dcls_kernel_size
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
@@ -118,6 +119,12 @@ class ConvNeXt_dcls(nn.Module):
         self.apply(self._init_weights)
         self.head.weight.data.mul_(head_init_scale)
         self.head.bias.data.mul_(head_init_scale)
+
+    def clamp_parameters(self):
+        with torch.no_grad():
+            lim = self.dcls_kernel_size // 2
+            for i in range(4):
+                self.P_stages[i].clamp_(-lim, lim)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear, cDcls2d)):

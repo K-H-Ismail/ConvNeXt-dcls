@@ -5,32 +5,21 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
+
 import math
 from typing import Iterable, Optional
 import torch
 from timm.data import Mixup
-from timm.utils import accuracy, ModelEma, AverageMeter
-
-from models.convnext import ConvNeXt
-from torchvision import datasets, transforms
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-import plotly.express as px
+from timm.utils import accuracy, ModelEma
 
 import utils
-
-
-from PIL import Image
-
-
-
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None, log_writer=None,
                     wandb_logger=None, start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
-                    num_training_steps_per_epoch=None, update_freq=None, use_amp=False, use_dcls=False, dcls_kernel_size=7):
+                    num_training_steps_per_epoch=None, update_freq=None, use_amp=False):
     model.train(True)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -72,19 +61,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         loss_rep = torch.zeros_like(loss)
         loss_fit = loss.item()
-        if use_dcls:
-            layer_count = 0
-            for name, param in model.named_parameters():
-                if name.endswith(".P"):
-                    layer_count += 1
-                    chout, chin, k_count = param.size(1), param.size(2), param.size(3)
-                    P = param.view(2, chout * chin, k_count)
-                    P = P.permute(1,2,0).contiguous()
-                    distances = torch.cdist(P,P,p=2)
-                    distances_triu = (1-distances).triu(diagonal=1)
-                    loss_rep += 2*torch.sum(torch.clamp_min(distances_triu , min=0)) / (k_count*(k_count-1)*chout*chin)
-            loss_rep /= layer_count
-
+        if "dcls" in args.model:
+            loss_rep = utils.get_dcls_loss_rep(model, loss)
+            loss_fit = loss
             loss = loss + loss_rep ** 2 if epoch > 20 else loss
 
         loss_value = loss.item()
@@ -112,16 +91,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 optimizer.zero_grad()
                 if model_ema is not None:
                     model_ema.update(model)
-        if use_dcls:
-            with torch.no_grad():
-                lim = dcls_kernel_size // 2
-                for i in range(4):
-                    if hasattr(model, 'module'):
-                        for j in range(len(model.module.stages[i])):
-                            model.module.stages[i][j].dwconv.P.clamp_(-lim, lim)
-                    else:
-                        for j in range(len(model.stages[i])):
-                            model.stages[i][j].dwconv.P.clamp_(-lim, lim)
+
+        if "dcls" in args.model:
+            if hasattr(model, 'module'):
+                model.module.clamp_parameters()
+            else:
+                model.clamp_parameters()
+
         torch.cuda.synchronize()
 
         if mixup_fn is None:
@@ -214,109 +190,4 @@ def evaluate(data_loader, model, device, use_amp=False):
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-class convnextForERF(ConvNeXt):
-
-    def __init__(self, args, depths=[3, 3, 9, 3], dims=[96, 192, 384, 768]):
-        super().__init__(in_chans=3, num_classes=args.nb_classes, depths=depths, dims=dims,
-                                     drop_path_rate=args.drop_path, layer_scale_init_value=args.layer_scale_init_value,
-                                     head_init_scale=args.head_init_scale, use_dcls=args.use_dcls,
-                                     dcls_kernel_size=args.dcls_kernel_size, dcls_kernel_count=args.dcls_kernel_count,
-                                     dcls_sync=args.dcls_sync)
-
-    def forward(self, x):
-        for i in range(4):
-            x = self.downsample_layers[i](x)
-            x = self.stages[i](x)
-        return x
-        # return self.norm(x) # Using the feature maps after the final norm also makes sense. Observed very little difference.
-
-
-def get_input_grad(model, samples):
-    outputs = model(samples)
-    out_size = outputs.size()
-    central_point = torch.nn.functional.relu(outputs[:, :, out_size[2] // 2, out_size[3] // 2]).sum()
-    grad = torch.autograd.grad(central_point, samples)
-    grad = grad[0]
-    grad = torch.nn.functional.relu(grad)
-    aggregated = grad.sum((0, 1))
-    grad_map = aggregated.cpu()
-    return grad_map
-
-def visualize_erf(model, args):
-
-    #   ================================= transform: resize to 1024x1024
-    t = [
-        transforms.Resize((1024, 1024), interpolation=Image.BICUBIC),
-        transforms.ToTensor(),
-        transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
-    ]
-    transform = transforms.Compose(t)
-
-    print("reading from datapath", args.data_path)
-    root = os.path.join(args.data_path, 'val')
-    dataset = datasets.ImageFolder(root, transform=transform)
-
-    sampler_val = torch.utils.data.SequentialSampler(dataset)
-    data_loader_val = torch.utils.data.DataLoader(dataset, sampler=sampler_val,
-        batch_size=1, num_workers=args.num_workers, pin_memory=args.pin_mem, drop_last=False)
-
-    if args.model == 'convnext_tiny':
-        depths, dims = [3, 3, 9, 3], [96, 192, 384, 768]
-    elif args.model == 'convnext_small':
-        depths, dims = [3, 3, 27, 3], [96, 192, 384, 768]
-    elif args.model == 'convnext_base':
-        depths, dims = [3, 3, 27, 3], [128, 256, 512, 1024]
-    elif args.model == 'convnext_large':
-        depths, dims = [3, 3, 27, 3], [192, 384, 768, 1536]
-    elif args.model == 'convnext_xlarge':
-        depths, dims = [3, 3, 27, 3], [256, 512, 1024, 2048]
-    else:
-        raise ValueError('Unsupported model. Please add it here.')
-
-    model_for_erf = convnextForERF(args, depths=depths, dims=dims)
-
-    device = torch.device(args.device)
-    model_for_erf.to(device)
-    model_for_erf.load_state_dict(model.state_dict())
-    model_for_erf.eval()    #   fix BN and droppath
-
-    optimizer = torch.optim.SGD(model_for_erf.parameters(), lr=0, weight_decay=0)
-
-    meter = AverageMeter()
-    optimizer.zero_grad()
-
-    for i, (samples, _) in enumerate(data_loader_val):
-        print("ERF construction: ", i, "/200")
-        if meter.count == 200:
-            break
-
-        samples = samples.to(device, non_blocking=True)
-        samples.requires_grad = True
-        optimizer.zero_grad()
-        contribution_scores = get_input_grad(model_for_erf, samples)
-
-        if contribution_scores.sum().isnan():
-            print('got NAN, next image')
-            continue
-        else:
-            meter.update(contribution_scores)
-
-    data = meter.avg
-    print(data.max())
-    print(data.min())
-    data = (data + 1).log10()       #   the scores differ in magnitude. take the logarithm for better readability
-    data = data / data.max()      #   rescale to [0,1] for the comparability among models
-    print('======================= the high-contribution area ratio =====================')
-
-    fig = px.imshow(data)
-    #ticks = dict(tickmode = 'linear', tick0 = 0, dtick = 50)
-    #fig.update_layout(
-    #    xaxis = ticks,
-    #    yaxis = ticks
-    #)
-    image_name = "erf_{model}{dcls}.png".format(model=args.model, dcls="_dcls" if args.use_dcls else "")
-    fig.write_image(image_name)
-    print('heatmap saved at ', image_name)
 

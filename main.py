@@ -15,8 +15,6 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import json
 import os
-import torchvision
-import timm
 
 from pathlib import Path
 
@@ -27,17 +25,17 @@ from timm.utils import ModelEma
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 
 from datasets import build_dataset
-from engine import train_one_epoch, evaluate, visualize_erf
+from engine import train_one_epoch, evaluate
 
 from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils
 import models.convnext
 import models.convnext_isotropic
-import models.convmixer
+import models.convnext_dcls
 
 def str2bool(v):
     """
-    Converts string to bool type; enables command line
+    Converts string to bool type; enables command line 
     arguments in the format of '--arg1 true --arg2 false'
     """
     if isinstance(v, bool):
@@ -50,7 +48,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 def get_args_parser():
-    parser = argparse.ArgumentParser('ConvNeXt training and evaluation script for image classification', add_help=False)
+    parser = argparse.ArgumentParser('ConvNeXt-dcls training and evaluation script for image classification', add_help=False)
     parser.add_argument('--batch_size', default=64, type=int,
                         help='Per GPU batch size')
     parser.add_argument('--epochs', default=300, type=int)
@@ -58,7 +56,7 @@ def get_args_parser():
                         help='gradient accumulation steps')
 
     # Model parameters
-    parser.add_argument('--model', default='convnext_tiny', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='convnext_dcls_tiny', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--drop_path', type=float, default=0, metavar='PCT',
                         help='Drop path rate (default: 0.0)')
@@ -191,39 +189,23 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
 
-    parser.add_argument('--use_amp', type=str2bool, default=False,
+    parser.add_argument('--use_amp', type=str2bool, default=False, 
                         help="Use PyTorch's AMP (Automatic Mixed Precision) or not")
 
     # Weights and Biases arguments
     parser.add_argument('--enable_wandb', type=str2bool, default=False,
                         help="enable logging to Weights and Biases")
     parser.add_argument('--online_wandb', type=str2bool, default=True,
-                        help="enable online logging to Weights and Biases")
-    parser.add_argument('--project', default='convnext', type=str,
+                        help="enable online logging to Weights and Biases")    
+    parser.add_argument('--project', default='convnext-dcls', type=str,
                         help="The name of the W&B project where you're sending the new run.")
     parser.add_argument('--wandb_ckpt', type=str2bool, default=False,
                         help="Save model checkpoints as W&B Artifacts.")
 
-    # Dcls arguments
-    parser.add_argument('--use_dcls', type=str2bool, default=False,
-                        help='Enabling dcls convolutions')
-    parser.add_argument('--dcls_kernel_size', default=7, type=int,
-                        help='Dcls size of dilated kernel')
-    parser.add_argument('--dcls_kernel_count', default=7, type=int,
-                        help='Dcls count of dilated kernel elementsts')
-    parser.add_argument('--dcls_sync', type=str2bool, default=False,
-                        help='Syncing all dcls depthwise layers')
-    parser.add_argument('--use_loss_rep', type=str2bool, default=False,
-                        help='Enabling dcls repulsive loss')
-    parser.add_argument('--dcls_df', type=str, default=None,
-                        help='Dataframe for dcls visualization')
-    parser.add_argument('--show_erf', type=str2bool, default=True,
-                        help='ERF visualization')
     return parser
 
 def main(args):
     utils.init_distributed_mode(args)
-    print(torch.__version__, torchvision.__version__, timm.__version__)
     print(args)
     device = torch.device(args.device)
 
@@ -264,7 +246,7 @@ def main(args):
         log_writer = None
 
     if global_rank == 0 and args.enable_wandb:
-        os.environ['WANDB_MODE'] = 'online' if args.online_wandb else 'offline'
+        os.environ['WANDB_MODE'] = 'online' if args.online_wandb else 'offline'        
         wandb_logger = utils.WandbLogger(args)
     else:
         wandb_logger = None
@@ -298,16 +280,12 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     model = create_model(
-        args.model,
-        pretrained=False,
-        num_classes=args.nb_classes,
+        args.model, 
+        pretrained=False, 
+        num_classes=args.nb_classes, 
         drop_path_rate=args.drop_path,
         layer_scale_init_value=args.layer_scale_init_value,
         head_init_scale=args.head_init_scale,
-        use_dcls = args.use_dcls,
-        dcls_kernel_size=args.dcls_kernel_size,
-        dcls_kernel_count=args.dcls_kernel_count,
-        dcls_sync=args.dcls_sync,
         )
 
     if args.finetune:
@@ -360,7 +338,8 @@ def main(args):
 
     if args.layer_decay < 1.0 or args.layer_decay > 1.0:
         num_layers = 12 # convnext layers divided into 12 parts, each with a different decayed lr value.
-        assert args.model in ['convnext_small', 'convnext_base', 'convnext_large', 'convnext_xlarge'], \
+        assert args.model in ['convnext_small', 'convnext_base', 'convnext_large', 'convnext_xlarge',
+                'convnext_dcls_small', 'convnext_dcls_base', 'convnext_dcls_large', 'convnext_dcls_xlarge'], \
              "Layer Decay impl only supports convnext_small/base/large/xlarge"
         assigner = LayerDecayValueAssigner(list(args.layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2)))
     else:
@@ -375,7 +354,7 @@ def main(args):
 
     optimizer = create_optimizer(
         args, model_without_ddp, skip_list=None,
-        get_num_layer=assigner.get_layer_id if assigner is not None else None,
+        get_num_layer=assigner.get_layer_id if assigner is not None else None, 
         get_layer_scale=assigner.get_scale if assigner is not None else None)
 
     loss_scaler = NativeScaler() # if args.use_amp is False, this won't be used
@@ -406,22 +385,10 @@ def main(args):
         args=args, model=model, model_without_ddp=model_without_ddp,
         optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema)
 
-    if global_rank == 0 and wandb_logger and args.use_dcls:
-        print("init dcls visualizer")
-        print(wandb_logger)
-        dcls_logger = utils.DclsVisualizer(wandb_logger=wandb_logger, num_bins=args.dcls_kernel_size, epoch=args.start_epoch, dcls_df=args.dcls_df)
-
-    else:
-        dcls_logger = None
     if args.eval:
         print(f"Eval only mode")
         test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
         print(f"Accuracy of the network on {len(dataset_val)} test images: {test_stats['acc1']:.5f}%")
-        if args.model_ema and args.model_ema_eval:
-            if args.show_erf:
-                visualize_erf(model_ema.ema, args)
-            test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
-            print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
         return
 
     max_accuracy = 0.0
@@ -443,14 +410,9 @@ def main(args):
             log_writer=log_writer, wandb_logger=wandb_logger, start_steps=epoch * num_training_steps_per_epoch,
             lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
             num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
-            use_amp=args.use_amp, use_dcls=args.use_dcls, dcls_kernel_size=args.dcls_kernel_size
+            use_amp=args.use_amp
         )
-        if args.use_dcls and global_rank == 0:
-            dcls_logger.log_all_layers(model, sync = args.dcls_sync)
-
         if args.output_dir and args.save_ckpt:
-            if global_rank == 0 and wandb_logger and args.use_dcls:
-                args.dcls_df = dcls_logger.df
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
                 utils.save_model(
                     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
@@ -513,7 +475,7 @@ def main(args):
     print('Training time {}'.format(total_time_str))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('ConvNeXt training and evaluation script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('ConvNeXt-dcls training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

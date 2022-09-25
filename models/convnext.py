@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
-from DCLS.construct.modules.Dcls import  Dcls2d as cDcls2d
 
 class Block(nn.Module):
     r""" ConvNeXt Block. There are two equivalent implementations:
@@ -24,15 +23,9 @@ class Block(nn.Module):
         drop_path (float): Stochastic depth rate. Default: 0.0
         layer_scale_init_value (float): Init value for Layer Scale. Default: 1e-6.
     """
-    def __init__(self, dim, P, drop_path=0., layer_scale_init_value=1e-6, use_dcls=False, dcls_kernel_size=7, dcls_kernel_count=7):
+    def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
         super().__init__()
-        if not use_dcls: 
-            self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
-        else:
-            self.dwconv = cDcls2d(dim, dim, kernel_count=dcls_kernel_count, dilated_kernel_size=dcls_kernel_size, padding=dcls_kernel_size//2, groups=dim, scaling=1)
-            if P is not None:
-                self.dwconv.P = P
-
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
@@ -52,8 +45,8 @@ class Block(nn.Module):
         if self.gamma is not None:
             x = self.gamma * x
         x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
-        x = input + self.drop_path(x)
 
+        x = input + self.drop_path(x)
         return x
 
 class ConvNeXt(nn.Module):
@@ -72,9 +65,10 @@ class ConvNeXt(nn.Module):
     """
     def __init__(self, in_chans=3, num_classes=1000, 
                  depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], drop_path_rate=0., 
-                 layer_scale_init_value=1e-6, head_init_scale=1., use_dcls=False, dcls_kernel_size=7, dcls_kernel_count=7, dcls_sync=False):
+                 layer_scale_init_value=1e-6, head_init_scale=1.,
+                 ):
         super().__init__()
-        self.depths = depths
+
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
@@ -91,23 +85,10 @@ class ConvNeXt(nn.Module):
         self.stages = nn.ModuleList() # 4 feature resolution stages, each consisting of multiple residual blocks
         dp_rates=[x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))] 
         cur = 0
-        
-        self.P_stages = [None] * 4
-        if dcls_sync:
-            self.P_stages = []
-            for i in range(4):       
-                P = torch.Tensor(2,dims[i], 1, dcls_kernel_count)        
-                with torch.no_grad():
-                    lim = dcls_kernel_size//2               
-                    scaling = 1
-                    torch.nn.init.normal_(P, 0, 0.5).clamp_(-lim,lim).div_(scaling)
-                    P = nn.Parameter(P.detach().clone())
-                self.P_stages.append(P)         
-          
         for i in range(4):
             stage = nn.Sequential(
-                *[Block(dim=dims[i], P=self.P_stages[i], drop_path=dp_rates[cur + j], 
-                layer_scale_init_value=layer_scale_init_value, use_dcls=use_dcls, dcls_kernel_size=dcls_kernel_size, dcls_kernel_count=dcls_kernel_count) for j in range(depths[i])]
+                *[Block(dim=dims[i], drop_path=dp_rates[cur + j], 
+                layer_scale_init_value=layer_scale_init_value) for j in range(depths[i])]
             )
             self.stages.append(stage)
             cur += depths[i]
@@ -120,7 +101,7 @@ class ConvNeXt(nn.Module):
         self.head.bias.data.mul_(head_init_scale)
 
     def _init_weights(self, m):
-        if isinstance(m, (nn.Conv2d, nn.Linear, cDcls2d)):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             nn.init.constant_(m.bias, 0)
 
@@ -219,3 +200,4 @@ def convnext_xlarge(pretrained=False, in_22k=False, **kwargs):
         checkpoint = torch.hub.load_state_dict_from_url(url=url, map_location="cpu")
         model.load_state_dict(checkpoint["model"])
     return model
+

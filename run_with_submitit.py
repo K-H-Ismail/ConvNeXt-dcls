@@ -16,7 +16,7 @@ import submitit
 
 def parse_args():
     classification_parser = classification.get_args_parser()
-    parser = argparse.ArgumentParser("Submitit for ConvNeXt", parents=[classification_parser])
+    parser = argparse.ArgumentParser("Submitit for ConvNeXti-dcls", parents=[classification_parser])
     parser.add_argument("--ngpus", default=8, type=int, help="Number of gpus to request on each node")
     parser.add_argument("--nodes", default=2, type=int, help="Number of nodes to request")
     parser.add_argument("--timeout", default=72, type=int, help="Duration of the job, in hours")
@@ -24,16 +24,17 @@ def parse_args():
     parser.add_argument("--job_dir", default="", type=str, help="Job directory; leave empty for default")
     parser.add_argument("--partition", default="gpu_p2", type=str, help="Partition where to submit")
     parser.add_argument("--use_volta32", action='store_true', default=False, help="Big models? Use this")
-    parser.add_argument("--account", default="owj@v100", type=str, help="Account name")
-    parser.add_argument("--constraint", default="v100", type=str, help="constraint v100 or a100")
+    parser.add_argument("--account", default="youracc", type=str, help="Account name")
+    # Please disable the following if cluster has no constraints
+    parser.add_argument("--constraint", default="v100", type=str, help="constraint v100 or a100") 
     parser.add_argument('--comment', default="", type=str,
                         help='Comment to pass to scheduler, e.g. priority message')
     return parser.parse_args()
 
 def get_shared_folder() -> Path:
-    work = os.getenv("WORK")
-    if Path(f"{work}/ConvNeXt/checkpoint").is_dir():
-        p = Path(f"{work}/ConvNeXt/checkpoint")
+    work = os.getenv("WORK") # Change with the parent folder of ConvNeXt-dcls
+    if Path(f"{work}/ConvNeXt-dcls/checkpoint").is_dir():
+        p = Path(f"{work}/ConvNeXt-dcls/checkpoint")
         p.mkdir(exist_ok=True)
         return p
     raise RuntimeError("No shared folder available")
