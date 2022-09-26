@@ -34,11 +34,11 @@ We propose **ConvNeXt**, a pure ConvNet model constructed entirely from standard
 | name | resolution |acc@1 | #params | FLOPs | model |
 |:---:|:---:|:---:|:---:| :---:|:---:|
 | ConvNeXt-T | 224x224 | 82.1 | 28M | 4.5G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth) |
-| ConvNeXt-T-dcls | 224x224 | 82.5 | 28M | 5.0G | [model](https://zenodo.org/record/7019217/files/convnext_dcls_tiny_1k_224_ema.pth) |
+| ConvNeXt-T-dcls | 224x224 | 82.5 | 28M | 5.0G | [model](https://zenodo.org/record/7112021/files/convnext_dcls_tiny_1k_224_ema.pth) |
 | ConvNeXt-S | 224x224 | 83.1 | 50M | 8.7G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_small_1k_224_ema.pth) |
-| ConvNeXt-S-dcls | 224x224 | 83.7 | 50M | 9.5G | [model](https://zenodo.org/record/7019217/files/convnext_dcls_small_1k_224_ema.pth) |
+| ConvNeXt-S-dcls | 224x224 | 83.7 | 50M | 9.5G | [model](https://zenodo.org/record/7112021/files/convnext_dcls_small_1k_224_ema.pth) |
 | ConvNeXt-B | 224x224 | 83.8 | 89M | 15.4G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth) |
-| ConvNeXt-B-dcls | 224x224 | 84.1 | 89M | 16.5G | [model](https://zenodo.org/record/7019217/files/convnext_dcls_base_1k_224_ema.pth) |
+| ConvNeXt-B-dcls | 224x224 | 84.1 | 89M | 16.5G | [model](https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth) |
 | ConvNeXt-B | 384x384 | 85.1 | 89M | 45.0G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_384.pth) |
 | ConvNeXt-L | 224x224 | 84.3 | 198M | 34.4G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_224_ema.pth) |
 | ConvNeXt-L | 384x384 | 85.5 | 198M | 101.0G | [model](https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_384.pth) |
