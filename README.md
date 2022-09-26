@@ -1,4 +1,20 @@
-# [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
+# [Dilated Convolution with Learnable Spacings](https://arxiv.org/abs/2201.03545)
+This is an implementation of the experiments using ConvNeXt-dcls models described in [[`arXiv`](https://arxiv.org/abs/2112.03740)].
+
+To install DCLS please follow the link: [DCLS](https://github.com/K-H-Ismail/Dilated-Convolution-with-Learnable-Spacings-PyTorch).
+
+## Changed files
+- [x] main.py : minor
+- [x] engine.py : add clamping and rep loss
+- [x] utils.py : define rep loss
+
+## Added files
+- hostlists.py
+- [x] engine.py : add clamping and rep loss
+- [x] utils.py : define rep loss
+
+
+## [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
 
 Official PyTorch implementation of **ConvNeXt**, from the following paper:
 
@@ -75,23 +91,27 @@ We give an example evaluation command for a ImageNet-22K pre-trained, then Image
 
 Single-GPU
 ```
-python main.py --model convnext_base --eval true \
---resume https://dl.fbaipublicfiles.com/convnext/convnext_base_22k_1k_224.pth \
+python main.py --model convnext_dcls_base --eval true --model_ema true --model_ema_eval true \
+--resume https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth \
 --input_size 224 --drop_path 0.2 \
 --data_path /path/to/imagenet-1k
 ```
 Multi-GPU
 ```
 python -m torch.distributed.launch --nproc_per_node=8 main.py \
---model convnext_base --eval true \
---resume https://dl.fbaipublicfiles.com/convnext/convnext_base_22k_1k_224.pth \
+--model convnext_dcls_base --eval true --model_ema true --model_ema_eval true \
+--resume https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth \
 --input_size 224 --drop_path 0.2 \
 --data_path /path/to/imagenet-1k
 ```
 
-This should give 
+This should give for the convNeXt-B-dcls model
 ```
-* Acc@1 85.820 Acc@5 97.868 loss 0.563
+* Acc@1 83.790 Acc@5 96.770 loss 0.683
+```
+and for the convNeXt-B-dcls model with EMA
+```
+* Acc@1 84.094 Acc@5 96.958 loss 0.653
 ```
 
 - For evaluating other model variants, change `--model`, `--resume`, `--input_size` accordingly. You can get the url to pre-trained models from the tables above. 
