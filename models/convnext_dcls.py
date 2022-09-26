@@ -170,9 +170,9 @@ class LayerNorm(nn.Module):
 
 
 model_urls = {
-    "convnext_dcls_tiny_1k": "https://zenodo.org/record/7019217/files/convnext_dcls_tiny_1k_224_ema.pth",
-    "convnext_dcls_small_1k": "https://zenodo.org/record/7019217/files/convnext_dcls_small_1k_224_ema.pth",
-    "convnext_dcls_base_1k": "https://zenodo.org/record/7019217/files/convnext_dcls_base_1k_224_ema.pth",
+    "convnext_dcls_tiny_1k": "https://zenodo.org/record/7112021/files/convnext_dcls_tiny_1k_224_ema.pth",
+    "convnext_dcls_small_1k": "https://zenodo.org/record/7112021/files/convnext_dcls_small_1k_224_ema.pth",
+    "convnext_dcls_base_1k": "https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth",
 }
 
 @register_model
