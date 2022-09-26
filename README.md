@@ -1,17 +1,25 @@
-# [Dilated Convolution with Learnable Spacings](https://arxiv.org/abs/2201.03545)
+# [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
+
+## [Dilated Convolution with Learnable Spacings](https://arxiv.org/abs/2201.03545)
+
 This is an implementation of the experiments using ConvNeXt-dcls models described in [[`arXiv`](https://arxiv.org/abs/2112.03740)].
 
 To install DCLS please follow the link: [DCLS](https://github.com/K-H-Ismail/Dilated-Convolution-with-Learnable-Spacings-PyTorch).
 
 ## Changed files
+
 - [x] main.py : minor
-- [x] engine.py : add clamping and rep loss
-- [x] utils.py : define rep loss
+- [x] engine.py : add clamping, rep loss, and scaling the lr for positions
+- [x] optim_factory.py : add scaling for the lr of positions
+- [x] utils.py : define rep loss.
+- [x] run_with_submitit.py : adapt to cluster specificities
 
 ## Added files
-- hostlists.py
-- [x] engine.py : add clamping and rep loss
-- [x] utils.py : define rep loss
+
+- [x] hostlists.py
+- [x] configs for ConvNeXt-dcls backbones in semantic segmentation
+- [x] configs for ConvNeXt-dcls backbones in object detection
+- [x] models/convnext_dcls.py : the new model !
 
 
 ## [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
