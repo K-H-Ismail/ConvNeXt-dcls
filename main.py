@@ -35,7 +35,7 @@ import models.convnext_dcls
 
 def str2bool(v):
     """
-    Converts string to bool type; enables command line 
+    Converts string to bool type; enables command line
     arguments in the format of '--arg1 true --arg2 false'
     """
     if isinstance(v, bool):
@@ -189,14 +189,14 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
 
-    parser.add_argument('--use_amp', type=str2bool, default=False, 
+    parser.add_argument('--use_amp', type=str2bool, default=False,
                         help="Use PyTorch's AMP (Automatic Mixed Precision) or not")
 
     # Weights and Biases arguments
     parser.add_argument('--enable_wandb', type=str2bool, default=False,
                         help="enable logging to Weights and Biases")
     parser.add_argument('--online_wandb', type=str2bool, default=True,
-                        help="enable online logging to Weights and Biases")    
+                        help="enable online logging to Weights and Biases")
     parser.add_argument('--project', default='convnext-dcls', type=str,
                         help="The name of the W&B project where you're sending the new run.")
     parser.add_argument('--wandb_ckpt', type=str2bool, default=False,
@@ -246,7 +246,7 @@ def main(args):
         log_writer = None
 
     if global_rank == 0 and args.enable_wandb:
-        os.environ['WANDB_MODE'] = 'online' if args.online_wandb else 'offline'        
+        os.environ['WANDB_MODE'] = 'online' if args.online_wandb else 'offline'
         wandb_logger = utils.WandbLogger(args)
     else:
         wandb_logger = None
@@ -280,9 +280,9 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     model = create_model(
-        args.model, 
-        pretrained=False, 
-        num_classes=args.nb_classes, 
+        args.model,
+        pretrained=False,
+        num_classes=args.nb_classes,
         drop_path_rate=args.drop_path,
         layer_scale_init_value=args.layer_scale_init_value,
         head_init_scale=args.head_init_scale,
@@ -354,7 +354,7 @@ def main(args):
 
     optimizer = create_optimizer(
         args, model_without_ddp, skip_list=None,
-        get_num_layer=assigner.get_layer_id if assigner is not None else None, 
+        get_num_layer=assigner.get_layer_id if assigner is not None else None,
         get_layer_scale=assigner.get_scale if assigner is not None else None)
 
     loss_scaler = NativeScaler() # if args.use_amp is False, this won't be used
@@ -389,6 +389,9 @@ def main(args):
         print(f"Eval only mode")
         test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
         print(f"Accuracy of the network on {len(dataset_val)} test images: {test_stats['acc1']:.5f}%")
+        if args.model_ema and args.model_ema_eval:
+            test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
+            print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
         return
 
     max_accuracy = 0.0
@@ -410,7 +413,7 @@ def main(args):
             log_writer=log_writer, wandb_logger=wandb_logger, start_steps=epoch * num_training_steps_per_epoch,
             lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
             num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
-            use_amp=args.use_amp
+            use_amp=args.use_amp, model_name=args.model
         )
         if args.output_dir and args.save_ckpt:
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
