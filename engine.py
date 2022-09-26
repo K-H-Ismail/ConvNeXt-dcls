@@ -19,7 +19,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None, log_writer=None,
                     wandb_logger=None, start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
-                    num_training_steps_per_epoch=None, update_freq=None, use_amp=False):
+                    num_training_steps_per_epoch=None, update_freq=None, use_amp=False, model_name=""):
     model.train(True)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -61,7 +61,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         loss_rep = torch.zeros_like(loss)
         loss_fit = loss.item()
-        if "dcls" in args.model:
+        if "dcls" in model_name:
             loss_rep = utils.get_dcls_loss_rep(model, loss)
             loss_fit = loss
             loss = loss + loss_rep ** 2 if epoch > 20 else loss
@@ -92,7 +92,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 if model_ema is not None:
                     model_ema.update(model)
 
-        if "dcls" in args.model:
+        if "dcls" in model_name:
             if hasattr(model, 'module'):
                 model.module.clamp_parameters()
             else:
