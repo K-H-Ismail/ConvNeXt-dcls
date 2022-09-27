@@ -6,6 +6,8 @@ This is an implementation of the experiments using ConvNeXt-dcls models describe
 
 To install DCLS please follow the link: [DCLS](https://github.com/K-H-Ismail/Dilated-Convolution-with-Learnable-Spacings-PyTorch).
 
+Please check [INSTALL.md](INSTALL.md) for installation instructions. 
+
 ## Changed files
 
 - [x] main.py : minor
