@@ -389,9 +389,6 @@ def main(args):
         print(f"Eval only mode")
         test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
         print(f"Accuracy of the network on {len(dataset_val)} test images: {test_stats['acc1']:.5f}%")
-        if args.model_ema and args.model_ema_eval:
-            test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
-            print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
         return
 
     max_accuracy = 0.0
