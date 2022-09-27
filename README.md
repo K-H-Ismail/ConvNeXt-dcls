@@ -21,6 +21,14 @@ To install DCLS please follow the link: [DCLS](https://github.com/K-H-Ismail/Dil
 - [x] configs for ConvNeXt-dcls backbones in object detection
 - [x] models/convnext_dcls.py : the new model !
 
+## Added Backbones
+
+- [x] ConvNeXt-T-dcls
+- [x] ConvNeXt-S-dcls
+- [x] ConvNeXt-B-dcls
+- [x] Fine tuned models for object detection and semantic segmentation using the three backbones above.
+
+
 
 ## [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
 
@@ -114,10 +122,7 @@ python -m torch.distributed.launch --nproc_per_node=8 main.py \
 ```
 
 This should give for the convNeXt-B-dcls model
-```
-* Acc@1 83.790 Acc@5 96.770 loss 0.683
-```
-and for the convNeXt-B-dcls model with EMA
+
 ```
 * Acc@1 84.094 Acc@5 96.958 loss 0.653
 ```
