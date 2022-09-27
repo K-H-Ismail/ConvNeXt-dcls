@@ -107,7 +107,7 @@ We give an example evaluation command for a ImageNet-22K pre-trained, then Image
 
 Single-GPU
 ```
-python main.py --model convnext_dcls_base --eval true --model_ema true --model_ema_eval true \
+python main.py --model convnext_dcls_base --eval true \
 --resume https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth \
 --input_size 224 --drop_path 0.2 \
 --data_path /path/to/imagenet-1k
@@ -115,7 +115,7 @@ python main.py --model convnext_dcls_base --eval true --model_ema true --model_e
 Multi-GPU
 ```
 python -m torch.distributed.launch --nproc_per_node=8 main.py \
---model convnext_dcls_base --eval true --model_ema true --model_ema_eval true \
+--model convnext_dcls_base --eval true \
 --resume https://zenodo.org/record/7112021/files/convnext_dcls_base_1k_224_ema.pth \
 --input_size 224 --drop_path 0.2 \
 --data_path /path/to/imagenet-1k
