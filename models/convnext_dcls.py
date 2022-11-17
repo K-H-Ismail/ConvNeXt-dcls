@@ -11,7 +11,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
-from DCLS.construct.modules.Dcls import  Dcls2d as cDcls2d
+try:
+    from DCLS.construct.modules.Dcls import  Dcls2d as cDcls2d
+except:
+    from DCLS.construct.modules import  Dcls2d as cDcls2d
 
 class Block(nn.Module):
     r""" ConvNeXt_dcls Block. There are two equivalent implementations:
