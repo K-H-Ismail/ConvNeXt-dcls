@@ -11,7 +11,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
-from DCLS.construct.modules.Dcls import  Dcls2d as cDcls2d
+try:
+    from DCLS.construct.modules.Dcls import  Dcls2d as cDcls2d
+except:
+    from DCLS.construct.modules import  Dcls2d as cDcls2d
 
 from mmcv_custom import load_checkpoint
 from mmdet.utils import get_root_logger
