@@ -32,7 +32,7 @@ class Block(nn.Module):
         self.dwconv = cDcls2d(dim, dim, kernel_count=dcls_kernel_count,
                               dilated_kernel_size=dcls_kernel_size,
                               padding=dcls_kernel_size//2, groups=dim,
-                              scaling=1, use_implicit_gemm=True)
+                              use_implicit_gemm=True)
         self.dwconv.P = P
         self.norm = LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
