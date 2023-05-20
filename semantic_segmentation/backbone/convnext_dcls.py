@@ -36,7 +36,7 @@ class Block(nn.Module):
                  dcls_kernel_count=34):
         super().__init__()
         self.dwconv = cDcls2d(dim, dim, kernel_count=dcls_kernel_count, dilated_kernel_size=dcls_kernel_size,
-                              padding=dcls_kernel_size//2, groups=dim, scaling=1, use_implicit_gemm=False)
+                              padding=dcls_kernel_size//2, groups=dim, use_implicit_gemm=False)
         if P is not None:
             self.dwconv.P = P
         self.norm = LayerNorm(dim, eps=1e-6)
